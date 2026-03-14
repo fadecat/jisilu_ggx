@@ -4,8 +4,10 @@ import time
 import os
 
 from main import HEADERS, JISILU_COOKIE, MAX_MSG_LEN, send_wechat, send_alert
+from irm_query import query_irm
 
 CB_WECHAT_WEBHOOK = os.environ.get("CB_WECHAT_WEBHOOK", "")
+IRM_WECHAT_WEBHOOK = os.environ.get("IRM_WECHAT_WEBHOOK", "")
 
 CB_URL = "https://www.jisilu.cn/data/cbnew/cb_list_new/"
 
@@ -127,6 +129,46 @@ def build_cb_messages(data):
     return messages
 
 
+def build_irm_messages(rows):
+    """查询每只转债正股的董秘互动，构建推送消息"""
+    # 去重：同一正股只查一次
+    seen = set()
+    stocks = []
+    for row in rows:
+        c = row["cell"]
+        stock_id = c.get("stock_id", "")
+        if stock_id and stock_id not in seen:
+            seen.add(stock_id)
+            stocks.append((c.get("stock_nm", ""), stock_id))
+
+    all_parts = []
+    for stock_nm, stock_id in stocks:
+        qas = query_irm(stock_nm, stock_id)
+        if not qas:
+            continue
+        part = f"**{stock_nm}**({stock_id})\n"
+        for qa in qas[:3]:  # 每只最多3条
+            q = qa["question"][:100] + ("..." if len(qa["question"]) > 100 else "")
+            a = qa["answer"][:200] + ("..." if len(qa["answer"]) > 200 else "")
+            part += f"> Q: {q}\n> A: {a}\n"
+        all_parts.append(part)
+
+    if not all_parts:
+        return []
+
+    header = "**📣 正股董秘互动（最近一周）**\n"
+    messages = []
+    current = header
+    for part in all_parts:
+        if len(current) + len(part) > MAX_MSG_LEN:
+            messages.append(current.rstrip())
+            current = "**📣 正股董秘互动（续）**\n"
+        current += part
+    if current.strip():
+        messages.append(current.rstrip())
+    return messages
+
+
 def main():
     if not CB_WECHAT_WEBHOOK:
         raise ValueError("缺少 CB_WECHAT_WEBHOOK 环境变量")
@@ -146,6 +188,15 @@ def main():
         print(msg)
         print("---")
     send_wechat(messages, CB_WECHAT_WEBHOOK)
+
+    # 查询正股董秘互动问答
+    rows = filter_cb(data.get("rows", []))
+    irm_messages = build_irm_messages(rows)
+    if irm_messages:
+        for msg in irm_messages:
+            print(msg)
+            print("---")
+        send_wechat(irm_messages, IRM_WECHAT_WEBHOOK)
 
 
 if __name__ == "__main__":
