@@ -3,7 +3,7 @@ import time
 
 import os
 
-from main import HEADERS, JISILU_COOKIE, MAX_MSG_LEN, send_wechat
+from main import HEADERS, JISILU_COOKIE, MAX_MSG_LEN, send_wechat, send_alert
 
 CB_WECHAT_WEBHOOK = os.environ.get("CB_WECHAT_WEBHOOK", "")
 
@@ -131,7 +131,16 @@ def main():
     if not CB_WECHAT_WEBHOOK:
         raise ValueError("缺少 CB_WECHAT_WEBHOOK 环境变量")
 
-    data = fetch_cb_data()
+    try:
+        data = fetch_cb_data()
+    except Exception as e:
+        send_alert(f"⚠️ 可转债推送系统异常：数据获取失败，Cookie 可能已过期。\n错误信息：{e}", CB_WECHAT_WEBHOOK)
+        return
+
+    if not data.get("rows"):
+        send_alert("⚠️ 可转债推送系统异常：获取到的数据为空，Cookie 可能已过期。", CB_WECHAT_WEBHOOK)
+        return
+
     messages = build_cb_messages(data)
     for msg in messages:
         print(msg)

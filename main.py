@@ -107,6 +107,21 @@ def build_messages(data):
     return messages
 
 
+def send_alert(text, webhook=None):
+    """发送告警文本消息到企业微信"""
+    url = webhook or WECHAT_WEBHOOK
+    payload = {
+        "msgtype": "text",
+        "text": {"content": text},
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=10)
+        resp.raise_for_status()
+        print(f"告警已发送: {text}")
+    except Exception as e:
+        print(f"告警发送失败: {e}")
+
+
 def send_wechat(messages, webhook=None):
     url = webhook or WECHAT_WEBHOOK
     for i, content in enumerate(messages, 1):
@@ -128,7 +143,16 @@ def main():
     if not WECHAT_WEBHOOK:
         raise ValueError("缺少 WECHAT_WEBHOOK 环境变量")
 
-    data = fetch_data()
+    try:
+        data = fetch_data()
+    except Exception as e:
+        send_alert(f"⚠️ 高股息推送系统异常：数据获取失败，Cookie 可能已过期。\n错误信息：{e}")
+        return
+
+    if not data.get("rows"):
+        send_alert("⚠️ 高股息推送系统异常：获取到的股票数据为空，Cookie 可能已过期。")
+        return
+
     messages = build_messages(data)
     for msg in messages:
         print(msg)
