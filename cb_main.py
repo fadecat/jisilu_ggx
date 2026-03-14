@@ -148,8 +148,8 @@ def build_irm_messages(rows):
             continue
         part = f"**{stock_nm}**({stock_id})\n"
         for qa in qas[:3]:  # 每只最多3条
-            q = qa["question"][:100] + ("..." if len(qa["question"]) > 100 else "")
-            a = qa["answer"][:200] + ("..." if len(qa["answer"]) > 200 else "")
+            q = qa["question"][:80] + ("..." if len(qa["question"]) > 80 else "")
+            a = qa["answer"][:150] + ("..." if len(qa["answer"]) > 150 else "")
             part += f"> Q: {q}\n> A: {a}\n"
         all_parts.append(part)
 
@@ -161,7 +161,8 @@ def build_irm_messages(rows):
     current = header
     for part in all_parts:
         if len(current) + len(part) > MAX_MSG_LEN:
-            messages.append(current.rstrip())
+            if current.strip():
+                messages.append(current.rstrip())
             current = "**📣 正股董秘互动（续）**\n"
         current += part
     if current.strip():
