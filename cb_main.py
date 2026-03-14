@@ -91,18 +91,27 @@ def format_cb(idx, c):
     return line
 
 
+CB_RULE_MSG = (
+    "**📋 可转债筛选规则**\n"
+    "> 价格 ≤ 120元，到期收益率 ≥ 0%\n"
+    "> 评级：AAA ~ A-\n"
+    "> 已上市，排除停牌\n"
+    "> 排除已公告强赎、到期赎回"
+)
+
+
 def build_cb_messages(data):
     """构建可转债消息列表，每条不超过 MAX_MSG_LEN"""
     rows = filter_cb(data.get("rows", []))
     total = len(rows)
     if not rows:
-        return ["暂无符合条件的可转债数据"]
+        return [CB_RULE_MSG, "暂无符合条件的可转债数据"]
 
     show_rows = rows[:MAX_SHOW]
     header = f"**集思录可转债筛选** (共 {total} 只)\n"
     if total > MAX_SHOW:
         header += f"以下展示前 {MAX_SHOW} 只\n"
-    messages = []
+    messages = [CB_RULE_MSG]
     current = header
 
     for i, row in enumerate(show_rows, 1):

@@ -71,18 +71,27 @@ def format_stock(idx, c):
     )
 
 
+RULE_MSG = (
+    "**📋 高股息筛选规则**\n"
+    "> PE ≤ 20，PB ≤ 2\n"
+    "> 股息率 ≥ 3%，ROE ≥ 5%\n"
+    "> PE温度 ≤ 25，PB温度 ≤ 25\n"
+    "> 连续分红 ≥ 1年，平均ROE ≥ 5%"
+)
+
+
 def build_messages(data):
     """构建消息列表, 每条不超过 MAX_MSG_LEN"""
     rows = data.get("rows", [])
     total = len(rows)
     if not rows:
-        return ["暂无符合条件的股票数据"]
+        return [RULE_MSG, "暂无符合条件的股票数据"]
 
     show_rows = rows[:MAX_SHOW]
     header = f"**集思录高股息筛选** (共 {total} 只)\n"
     if total > MAX_SHOW:
         header += f"以下展示股息率前 {MAX_SHOW} 名\n"
-    messages = []
+    messages = [RULE_MSG]
     current = header
 
     for i, row in enumerate(show_rows, 1):
