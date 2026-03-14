@@ -30,4 +30,5 @@ jobs:
         env:
           JISILU_COOKIE: ${{ secrets.JISILU_COOKIE }}
           CB_WECHAT_WEBHOOK: ${{ secrets.CB_WECHAT_WEBHOOK }}
+          IRM_WECHAT_WEBHOOK: ${{ secrets.IRM_WECHAT_WEBHOOK }}
         run: python cb_main.py
