@@ -1,0 +1,27 @@
+name: Daily Dividend Report
+
+on:
+  schedule:
+    # A股收盘 15:00 CST = UTC+8, 延迟30分钟确保数据更新
+    # 15:30 CST = 07:30 UTC, 仅工作日运行 (周一到周五)
+    - cron: '30 7 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch and push report
+        env:
+          JISILU_COOKIE: ${{ secrets.JISILU_COOKIE }}
+          WECHAT_WEBHOOK: ${{ secrets.WECHAT_WEBHOOK }}
+        run: python main.py
