@@ -98,13 +98,14 @@ def build_messages(data):
     return messages
 
 
-def send_wechat(messages):
+def send_wechat(messages, webhook=None):
+    url = webhook or WECHAT_WEBHOOK
     for i, content in enumerate(messages, 1):
         payload = {
             "msgtype": "markdown",
             "markdown": {"content": content},
         }
-        resp = requests.post(WECHAT_WEBHOOK, json=payload, timeout=10)
+        resp = requests.post(url, json=payload, timeout=10)
         resp.raise_for_status()
         result = resp.json()
         if result.get("errcode") != 0:

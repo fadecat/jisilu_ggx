@@ -20,8 +20,14 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Fetch and push report
+      - name: Fetch and push dividend report
         env:
           JISILU_COOKIE: ${{ secrets.JISILU_COOKIE }}
           WECHAT_WEBHOOK: ${{ secrets.WECHAT_WEBHOOK }}
         run: python main.py
+
+      - name: Fetch and push CB report
+        env:
+          JISILU_COOKIE: ${{ secrets.JISILU_COOKIE }}
+          CB_WECHAT_WEBHOOK: ${{ secrets.CB_WECHAT_WEBHOOK }}
+        run: python cb_main.py
