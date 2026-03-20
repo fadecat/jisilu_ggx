@@ -84,7 +84,7 @@ def format_cb(idx, c):
     if sprice not in (None, ""):
         try:
             if float(sprice) < 5:
-                sprice_text = f"**<font color=\"warning\">{sprice}（退市风险）</font>**"
+                sprice_text = f"**<font color=\"warning\">{sprice}</font>**"
         except (TypeError, ValueError):
             pass
 
