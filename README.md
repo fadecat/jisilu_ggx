@@ -7,7 +7,7 @@
 | 模块 | 入口 | 说明 |
 |------|------|------|
 | 高股息筛选 | `main.py` | PE≤20, PB≤2, 股息率≥3%, ROE≥5% 等条件筛选 |
-| 可转债筛选 | `cb_main.py` | 价格≤120, 到期收益率≥0%, 排除强赎/到期赎回 |
+| 可转债筛选 | `cb_main.py` | 价格≤115, 排除已公告强赎/到期赎回，保留到期收益率展示 |
 | 董秘互动查询 | `irm_query.py` | 深交所互动易 + 上证e互动，自动按股票代码路由 |
 
 ## 环境变量
@@ -26,6 +26,8 @@ pip install requests
 
 python test_preview.py        # 高股息 → preview.md
 python test_cb_preview.py     # 可转债 → cb_preview.md
+python test_cb_list_preview.py  # 可转债列表 → cb_list_preview.md
+python test_cb_filter_debug.py  # 检查指定转债为何被过滤
 python test_irm_preview.py    # 董秘互动查询验证
 ```
 

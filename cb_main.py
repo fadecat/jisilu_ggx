@@ -2,6 +2,7 @@ import requests
 import time
 
 import os
+from urllib.parse import urlencode
 
 from main import HEADERS, JISILU_COOKIE, MAX_MSG_LEN, send_wechat, send_alert
 from irm_query import query_irm
@@ -10,19 +11,21 @@ CB_WECHAT_WEBHOOK = os.environ.get("CB_WECHAT_WEBHOOK", "")
 IRM_WECHAT_WEBHOOK = os.environ.get("IRM_WECHAT_WEBHOOK", "")
 
 CB_URL = "https://www.jisilu.cn/data/cbnew/cb_list_new/"
+CB_MAX_PRICE = 115
+CB_ALLOWED_RATINGS = ["AAA", "AA+", "AA", "AA-", "A+", "A", "A-"]
+CB_ALLOWED_MARKETS = ["shmb", "shkc", "szmb", "szcy"]
 
 CB_FORM_DATA = {
     "fprice": "",
-    "tprice": 115,
+    "tprice": CB_MAX_PRICE,
     "curr_iss_amt": "",
     "convert_amt_ratio": "",
     "premium_rt": "",
-    # "ytm_rt": 0,
     "fyear_left": "",
     "tyear_left": "",
-    "rating_cd[]": ["AAA", "AA+", "AA", "AA-", "A+", "A", "A-"],
+    "rating_cd[]": CB_ALLOWED_RATINGS,
     "is_search": "Y",
-    "market_cd[]": ["shmb", "shkc", "szmb", "szcy"],
+    "market_cd[]": CB_ALLOWED_MARKETS,
     "show_blocked": "N",
     "min_price_only": "N",
     "btype": "",
@@ -34,31 +37,57 @@ CB_FORM_DATA = {
 }
 
 
-def fetch_cb_data():
-    params = {"___jsl": f"LST___t={int(time.time() * 1000)}"}
+def build_cb_request_urls(timestamp_ms=None, form_data=None):
+    """构造实际请求 URL 和便于调试复制的完整 URL"""
+    ts = timestamp_ms or int(time.time() * 1000)
+    params = {"___jsl": f"LST___t={ts}"}
+    post_url = requests.Request("POST", CB_URL, params=params).prepare().url
+    payload = form_data or CB_FORM_DATA
+    form_query = urlencode(payload, doseq=True)
+    debug_url = post_url if not form_query else f"{post_url}&{form_query}"
+    return params, post_url, debug_url
+
+
+def fetch_cb_data(form_data=None):
+    payload = form_data or CB_FORM_DATA
+    params, post_url, debug_url = build_cb_request_urls(form_data=payload)
+    print(f"CB POST URL: {post_url}")
+    print(f"CB DEBUG URL: {debug_url}")
     headers = {
         **HEADERS,
         "Cookie": JISILU_COOKIE,
         "Referer": "https://www.jisilu.cn/data/cbnew/",
     }
-    resp = requests.post(CB_URL, params=params, data=CB_FORM_DATA, headers=headers, timeout=30)
+    resp = requests.post(CB_URL, params=params, data=payload, headers=headers, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
 
+def get_cb_filter_reasons(c):
+    """返回命中的过滤原因；为空表示通过"""
+    reasons = []
+    icons = c.get("icons", {}) or {}
+    if "O" in icons:
+        reasons.append("已公告强赎(O)")
+    if "R" in icons:
+        reasons.append("到期赎回(R)")
+
+    try:
+        price = float(c.get("price", 999) or 999)
+    except (TypeError, ValueError):
+        price = 999
+    if price > CB_MAX_PRICE:
+        reasons.append(f"价格>{CB_MAX_PRICE}")
+
+    return reasons
+
+
 def filter_cb(rows):
-    """过滤可转债：排除已公告强赎(O)和到期赎回(R)，校验价格和到期收益率"""
+    """过滤可转债：排除已公告强赎(O)和到期赎回(R)，校验价格"""
     result = []
     for row in rows:
         c = row["cell"]
-        icons = c.get("icons", {}) or {}
-        # 排除已公告强赎和到期赎回
-        if "O" in icons or "R" in icons:
-            continue
-        # 二次校验
-        price = float(c.get("price", 999))
-        ytm_rt = float(c.get("ytm_rt", -1) or -1)
-        if price > 120 or ytm_rt < 0:
+        if get_cb_filter_reasons(c):
             continue
         result.append(row)
     # 按双低值升序排序
@@ -107,7 +136,7 @@ def format_cb(idx, c):
 
 CB_RULE_MSG = (
     "**📋 可转债筛选规则**\n"
-    "> 价格 ≤ 115元\n"
+    f"> 价格 ≤ {CB_MAX_PRICE}元\n"
     "> 评级：AAA ~ A-\n"
     "> 已上市，排除停牌\n"
     "> 排除已公告强赎、到期赎回"
