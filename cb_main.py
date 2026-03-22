@@ -13,11 +13,11 @@ CB_URL = "https://www.jisilu.cn/data/cbnew/cb_list_new/"
 
 CB_FORM_DATA = {
     "fprice": "",
-    "tprice": 120,
+    "tprice": 115,
     "curr_iss_amt": "",
     "convert_amt_ratio": "",
     "premium_rt": "",
-    "ytm_rt": 0,
+    # "ytm_rt": 0,
     "fyear_left": "",
     "tyear_left": "",
     "rating_cd[]": ["AAA", "AA+", "AA", "AA-", "A+", "A", "A-"],
