@@ -79,6 +79,15 @@ MAX_SHOW = 50
 
 def format_cb(idx, c):
     """格式化单只可转债"""
+    sprice = c.get("sprice")
+    sprice_text = "--" if sprice in (None, "") else str(sprice)
+    if sprice not in (None, ""):
+        try:
+            if float(sprice) < 5:
+                sprice_text = f"**<font color=\"warning\">{sprice}</font>**"
+        except (TypeError, ValueError):
+            pass
+
     line = (
         f"**{idx}. {c['bond_nm']}**({c['bond_id']})\n"
         f"> 价格:<font color=\"comment\">{c['price']}</font>"
@@ -86,7 +95,8 @@ def format_cb(idx, c):
         f"  到期收益率:<font color=\"warning\">{c.get('ytm_rt', '--')}%</font>\n"
         f"> 评级:{c.get('rating_cd', '--')}"
         f"  剩余年限:{c.get('year_left', '--')}年"
-        f"  正股:{c.get('stock_nm', '--')}\n"
+        f"  正股:{c.get('stock_nm', '--')}"
+        f"  正股价:{sprice_text}\n"
     )
     if is_force_redeem_triggered(c):
         line += f"> <font color=\"warning\">⚠已触发强赎（未公告）</font>\n"
