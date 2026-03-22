@@ -61,6 +61,8 @@ def filter_cb(rows):
         if price > 120 or ytm_rt < 0:
             continue
         result.append(row)
+    # 按双低值升序排序
+    result.sort(key=lambda r: float(r["cell"].get("dblow", 999) or 999))
     return result
 
 
