@@ -2,8 +2,9 @@ name: Daily Dividend Report
 
 on:
   schedule:
-    # A股收盘 15:00 CST = UTC+8, 延迟30分钟确保数据更新
-    # 15:30 CST = 07:30 UTC, 仅工作日运行 (周一到周五)
+    # 盘中收盘 11:30 CST = 03:30 UTC
+    - cron: '30 3 * * 1-5'
+    # A股收盘 15:30 CST = 07:30 UTC（延迟30分钟确保数据更新）
     - cron: '30 7 * * 1-5'
   workflow_dispatch:
 
