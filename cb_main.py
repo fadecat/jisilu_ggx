@@ -1,8 +1,10 @@
-import requests
-import time
-
+import csv
+import json
 import os
+import time
 from urllib.parse import urlencode
+
+import requests
 
 from main import HEADERS, JISILU_COOKIE, MAX_MSG_LEN, send_wechat, send_alert
 from irm_query import query_irm
@@ -90,9 +92,7 @@ def filter_cb(rows):
         if get_cb_filter_reasons(c):
             continue
         result.append(row)
-    # 按双低值升序排序
-    result.sort(key=lambda r: float(r["cell"].get("dblow", 999) or 999))
-    return result
+    return sort_cb_rows(result)
 
 
 def is_force_redeem_triggered(c):
@@ -108,8 +108,56 @@ def is_force_redeem_triggered(c):
 MAX_SHOW = 50
 
 
-def format_cb(idx, c):
+def to_float(value, default=float("inf")):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def assign_rank_score(rows, field_name, value_getter):
+    ranked = sorted(
+        enumerate(rows),
+        key=lambda item: (value_getter(item[1]), item[0]),
+    )
+    last_value = None
+    last_rank = 0
+    for position, (_, row) in enumerate(ranked, 1):
+        current_value = value_getter(row)
+        if current_value != last_value:
+            last_value = current_value
+            last_rank = position
+        row[field_name] = last_rank
+
+
+def sort_cb_rows(rows):
+    """按价格/规模/溢价率三项名次分求和后升序排序"""
+    ranked_rows = list(rows)
+    assign_rank_score(ranked_rows, "price_rank_score", lambda row: to_float(row["cell"].get("price")))
+    assign_rank_score(ranked_rows, "scale_rank_score", lambda row: to_float(row["cell"].get("curr_iss_amt")))
+    assign_rank_score(ranked_rows, "premium_rank_score", lambda row: to_float(row["cell"].get("premium_rt")))
+
+    for row in ranked_rows:
+        row["total_rank_score"] = (
+            row["price_rank_score"] +
+            row["scale_rank_score"] +
+            row["premium_rank_score"]
+        )
+
+    return sorted(
+        ranked_rows,
+        key=lambda row: (
+            row["total_rank_score"],
+            to_float(row["cell"].get("price")),
+            to_float(row["cell"].get("curr_iss_amt")),
+            to_float(row["cell"].get("premium_rt")),
+        ),
+    )
+
+
+def format_cb(idx, row):
     """格式化单只可转债"""
+    c = row["cell"]
     sprice = c.get("sprice")
     sprice_text = "--" if sprice in (None, "") else str(sprice)
     if sprice not in (None, ""):
@@ -123,7 +171,12 @@ def format_cb(idx, c):
         f"**{idx}. {c['bond_nm']}**({c['bond_id']})\n"
         f"> 价格:<font color=\"comment\">{c['price']}</font>"
         f"  溢价率:{c.get('premium_rt', '--')}%"
+        f"  规模:{c.get('curr_iss_amt', '--')}"
         f"  到期收益率:<font color=\"warning\">{c.get('ytm_rt', '--')}%</font>\n"
+        f"> 三低总分:<font color=\"info\">{row.get('total_rank_score', '--')}</font>"
+        f"  价格名次:{row.get('price_rank_score', '--')}"
+        f"  规模名次:{row.get('scale_rank_score', '--')}"
+        f"  溢价名次:{row.get('premium_rank_score', '--')}\n"
         f"> 评级:{c.get('rating_cd', '--')}"
         f"  剩余年限:{c.get('year_left', '--')}年"
         f"  正股:{c.get('stock_nm', '--')}"
@@ -139,7 +192,8 @@ CB_RULE_MSG = (
     f"> 价格 ≤ {CB_MAX_PRICE}元\n"
     "> 评级：AAA ~ A-\n"
     "> 已上市，排除停牌\n"
-    "> 排除已公告强赎、到期赎回"
+    "> 排除已公告强赎、到期赎回\n"
+    "> 排序：价格/规模/溢价率名次分相加，总分越低越靠前"
 )
 
 
@@ -158,7 +212,7 @@ def build_cb_messages(data):
     current = header
 
     for i, row in enumerate(show_rows, 1):
-        entry = format_cb(i, row["cell"])
+        entry = format_cb(i, row)
         if len(current) + len(entry) > MAX_MSG_LEN:
             messages.append(current.rstrip())
             current = f"**续({len(messages) + 1})**\n"
@@ -168,6 +222,31 @@ def build_cb_messages(data):
         messages.append(current.rstrip())
 
     return messages
+
+
+def export_cb_rows_to_csv(data, path="cb_raw_rows.csv"):
+    """导出接口返回的可转债原始字段到 CSV，便于查看全部列"""
+    rows = data.get("rows", [])
+    fieldnames = ["id"]
+    for row in rows:
+        for key in row.get("cell", {}).keys():
+            if key not in fieldnames:
+                fieldnames.append(key)
+
+    with open(path, "w", newline="", encoding="utf-8-sig") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            cell = row.get("cell", {})
+            record = {"id": row.get("id", "")}
+            for key in fieldnames[1:]:
+                value = cell.get(key, "")
+                if isinstance(value, (dict, list)):
+                    value = json.dumps(value, ensure_ascii=False)
+                record[key] = value
+            writer.writerow(record)
+
+    return path
 
 
 def build_irm_messages(rows):
