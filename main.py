@@ -58,7 +58,13 @@ def fetch_data():
 
 
 MAX_MSG_LEN = 2048
+MAX_MSG_BYTES = 3900
 MAX_SHOW = 50
+
+
+def get_msg_size(text):
+    """企业微信 markdown 长度按 UTF-8 字节更接近真实限制"""
+    return len(text.encode("utf-8"))
 
 
 def format_stock(idx, c):
@@ -96,7 +102,7 @@ def build_messages(data):
 
     for i, row in enumerate(show_rows, 1):
         entry = format_stock(i, row["cell"])
-        if len(current) + len(entry) > MAX_MSG_LEN:
+        if get_msg_size(current) + get_msg_size(entry) > MAX_MSG_BYTES:
             messages.append(current.rstrip())
             current = f"**续({len(messages) + 1})**\n"
         current += entry
@@ -134,7 +140,7 @@ def send_wechat(messages, webhook=None):
         result = resp.json()
         if result.get("errcode") != 0:
             raise RuntimeError(f"企业微信推送失败: {result}")
-        print(f"第 {i}/{len(messages)} 条推送成功 ({len(content)} 字符)")
+        print(f"第 {i}/{len(messages)} 条推送成功 ({len(content)} 字符 / {get_msg_size(content)} 字节)")
         if i < len(messages):
             time.sleep(1)
 

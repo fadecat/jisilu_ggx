@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 import requests
 
-from main import HEADERS, JISILU_COOKIE, MAX_MSG_LEN, send_wechat, send_alert
+from main import HEADERS, JISILU_COOKIE, MAX_MSG_BYTES, send_wechat, send_alert, get_msg_size
 from irm_query import query_irm
 
 CB_WECHAT_WEBHOOK = os.environ.get("CB_WECHAT_WEBHOOK", "")
@@ -276,7 +276,7 @@ def build_cb_messages(data, index_data=None):
 
     for i, row in enumerate(show_rows, 1):
         entry = format_cb(i, row)
-        if len(current) + len(entry) > MAX_MSG_LEN:
+        if get_msg_size(current) + get_msg_size(entry) > MAX_MSG_BYTES:
             messages.append(current.rstrip())
             current = f"**续({len(messages) + 1})**\n"
         current += entry
@@ -343,7 +343,7 @@ def build_irm_messages(rows):
     messages = []
     current = header
     for part in all_parts:
-        if len(current) + len(part) > MAX_MSG_LEN:
+        if get_msg_size(current) + get_msg_size(part) > MAX_MSG_BYTES:
             if current.strip():
                 messages.append(current.rstrip())
             current = "**📣 正股董秘互动（续）**\n"
