@@ -13,13 +13,15 @@ CB_WECHAT_WEBHOOK = os.environ.get("CB_WECHAT_WEBHOOK", "")
 IRM_WECHAT_WEBHOOK = os.environ.get("IRM_WECHAT_WEBHOOK", "")
 
 CB_URL = "https://www.jisilu.cn/data/cbnew/cb_list_new/"
+CB_INDEX_QUOTE_URL = "https://www.jisilu.cn/webapi/cb/index_quote/"
 CB_PAGE_SIZE = 1000
+CB_MAX_PRICE = 115
 CB_ALLOWED_RATINGS = ["AAA", "AA+", "AA", "AA-", "A+", "A", "A-"]
 CB_ALLOWED_MARKETS = ["shmb", "shkc", "szmb", "szcy"]
 
 CB_FORM_DATA = {
     "fprice": "",
-    "tprice": "",
+    "tprice": CB_MAX_PRICE,
     "curr_iss_amt": "",
     "convert_amt_ratio": "",
     "premium_rt": "",
@@ -72,6 +74,20 @@ def fetch_cb_data(form_data=None):
         )
 
     return data
+
+
+def fetch_cb_index_quote():
+    headers = {
+        **HEADERS,
+        "Cookie": JISILU_COOKIE,
+        "Referer": "https://www.jisilu.cn/data/cbnew/",
+    }
+    resp = requests.get(CB_INDEX_QUOTE_URL, headers=headers, timeout=30)
+    resp.raise_for_status()
+    payload = resp.json()
+    if payload.get("code") != 200:
+        raise RuntimeError(f"可转债概览接口返回异常: {payload}")
+    return payload.get("data", {})
 
 
 def get_cb_filter_reasons(c):
@@ -213,6 +229,7 @@ def format_cb(idx, row):
 
 CB_RULE_MSG = (
     "**📋 可转债筛选规则**\n"
+    f"> 价格：≤ {CB_MAX_PRICE}\n"
     "> 评级：AAA ~ A-\n"
     "> 已上市，排除停牌\n"
     "> 排除正股含 ST\n"
@@ -221,18 +238,40 @@ CB_RULE_MSG = (
 )
 
 
-def build_cb_messages(data):
+def build_cb_index_quote_message(index_data):
+    """构建可转债市场概览消息"""
+    if not index_data:
+        return ""
+
+    return (
+        "**📈 可转债市场概览**\n"
+        f"> 转债等权指数：{float(index_data.get('cur_index', 0)):.3f}"
+        f" +{float(index_data.get('cur_increase_val', 0)):.3f}"
+        f" +{float(index_data.get('cur_increase_rt', 0)):.3f}%\n"
+        f"> 温度：{float(index_data.get('temperature', 0)):.2f}\n"
+        f"> 成交额：{float(index_data.get('volume', 0)):.2f}亿元\n"
+        f"> 价格中位数：{float(index_data.get('mid_price', 0)):.3f}\n"
+        f"> 溢价率中位数：{float(index_data.get('mid_premium_rt', 0)):.2f}%\n"
+        f"> 到期收益率：{float(index_data.get('avg_ytm_rt', 0)):.2f}%"
+    )
+
+
+def build_cb_messages(data, index_data=None):
     """构建可转债消息列表，每条不超过 MAX_MSG_LEN"""
     rows = filter_cb(data.get("rows", []))
     total = len(rows)
+    messages = [CB_RULE_MSG]
+    index_msg = build_cb_index_quote_message(index_data)
+    if index_msg:
+        messages.append(index_msg)
     if not rows:
-        return [CB_RULE_MSG, "暂无符合条件的可转债数据"]
+        messages.append("暂无符合条件的可转债数据")
+        return messages
 
     show_rows = rows[:MAX_SHOW]
     header = f"**集思录可转债筛选** (共 {total} 只)\n"
     if total > MAX_SHOW:
         header += f"以下展示前 {MAX_SHOW} 只\n"
-    messages = [CB_RULE_MSG]
     current = header
 
     for i, row in enumerate(show_rows, 1):
@@ -320,6 +359,7 @@ def main():
 
     try:
         data = fetch_cb_data()
+        index_data = fetch_cb_index_quote()
     except Exception as e:
         send_alert(f"⚠️ 可转债推送系统异常：数据获取失败，Cookie 可能已过期。\n错误信息：{e}", CB_WECHAT_WEBHOOK)
         return
@@ -328,7 +368,7 @@ def main():
         send_alert("⚠️ 可转债推送系统异常：获取到的数据为空，Cookie 可能已过期。", CB_WECHAT_WEBHOOK)
         return
 
-    messages = build_cb_messages(data)
+    messages = build_cb_messages(data, index_data)
     for msg in messages:
         print(msg)
         print("---")
