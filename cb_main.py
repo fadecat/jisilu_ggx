@@ -13,13 +13,13 @@ CB_WECHAT_WEBHOOK = os.environ.get("CB_WECHAT_WEBHOOK", "")
 IRM_WECHAT_WEBHOOK = os.environ.get("IRM_WECHAT_WEBHOOK", "")
 
 CB_URL = "https://www.jisilu.cn/data/cbnew/cb_list_new/"
-CB_MAX_PRICE = 115
-CB_ALLOWED_RATINGS = ["AAA", "AA+", "AA", "AA-", "A+", "A", "A-"]
+CB_PAGE_SIZE = 1000
+CB_ALLOWED_RATINGS = ["AAA", "AA+", "AA", "AA-", "A+", "A"]
 CB_ALLOWED_MARKETS = ["shmb", "shkc", "szmb", "szcy"]
 
 CB_FORM_DATA = {
     "fprice": "",
-    "tprice": CB_MAX_PRICE,
+    "tprice": "",
     "curr_iss_amt": "",
     "convert_amt_ratio": "",
     "premium_rt": "",
@@ -35,7 +35,7 @@ CB_FORM_DATA = {
     "qflag": "N",
     "sw_cd": "",
     "bond_ids": "",
-    "rp": 50,
+    "rp": CB_PAGE_SIZE,
 }
 
 
@@ -62,7 +62,16 @@ def fetch_cb_data(form_data=None):
     }
     resp = requests.post(CB_URL, params=params, data=payload, headers=headers, timeout=30)
     resp.raise_for_status()
-    return resp.json()
+    data = resp.json()
+
+    rows = data.get("rows", [])
+    total = data.get("total")
+    if isinstance(total, int) and len(rows) < total:
+        raise RuntimeError(
+            f"可转债接口返回疑似未取全：rows={len(rows)}, total={total}，三低排序可能失真"
+        )
+
+    return data
 
 
 def get_cb_filter_reasons(c):
@@ -73,19 +82,15 @@ def get_cb_filter_reasons(c):
         reasons.append("已公告强赎(O)")
     if "R" in icons:
         reasons.append("到期赎回(R)")
-
-    try:
-        price = float(c.get("price", 999) or 999)
-    except (TypeError, ValueError):
-        price = 999
-    if price > CB_MAX_PRICE:
-        reasons.append(f"价格>{CB_MAX_PRICE}")
+    stock_nm = (c.get("stock_nm") or "").upper()
+    if "ST" in stock_nm:
+        reasons.append("正股含ST")
 
     return reasons
 
 
 def filter_cb(rows):
-    """过滤可转债：排除已公告强赎(O)和到期赎回(R)，校验价格"""
+    """过滤可转债：排除已公告强赎(O)和到期赎回(R)"""
     result = []
     for row in rows:
         c = row["cell"]
@@ -106,6 +111,10 @@ def is_force_redeem_triggered(c):
 
 
 MAX_SHOW = 50
+THREE_LOW_FACTORS = [
+    ("dblow", "双低"),
+    ("curr_iss_amt", "规模"),
+]
 
 
 def to_float(value, default=float("inf")):
@@ -115,42 +124,56 @@ def to_float(value, default=float("inf")):
         return default
 
 
-def assign_rank_score(rows, field_name, value_getter):
-    ranked = sorted(
-        enumerate(rows),
-        key=lambda item: (value_getter(item[1]), item[0]),
-    )
-    last_value = None
-    last_rank = 0
-    for position, (_, row) in enumerate(ranked, 1):
-        current_value = value_getter(row)
-        if current_value != last_value:
-            last_value = current_value
-            last_rank = position
-        row[field_name] = last_rank
+def get_numeric_value(row, field_name):
+    value = row["cell"].get(field_name)
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def assign_factor_scores(rows, field_name, label):
+    ranked = []
+    for index, row in enumerate(rows):
+        value = get_numeric_value(row, field_name)
+        if value is not None:
+            ranked.append((index, row, value))
+
+    ranked.sort(key=lambda item: (item[2], item[0]))
+    total = len(ranked)
+    rank_key = f"{field_name}_rank"
+    score_key = f"{field_name}_score"
+    for rank, (_, row, _) in enumerate(ranked, 1):
+        row[rank_key] = rank
+        row[score_key] = total - rank + 1
+    for row in rows:
+        row.setdefault(rank_key, None)
+        row.setdefault(score_key, 0)
+    return total
 
 
 def sort_cb_rows(rows):
-    """按价格/规模/溢价率三项名次分求和后升序排序"""
+    """按双低/规模两项排名得分求和后降序排序"""
     ranked_rows = list(rows)
-    assign_rank_score(ranked_rows, "price_rank_score", lambda row: to_float(row["cell"].get("price")))
-    assign_rank_score(ranked_rows, "scale_rank_score", lambda row: to_float(row["cell"].get("curr_iss_amt")))
-    assign_rank_score(ranked_rows, "premium_rank_score", lambda row: to_float(row["cell"].get("premium_rt")))
+    for field_name, label in THREE_LOW_FACTORS:
+        assign_factor_scores(ranked_rows, field_name, label)
 
     for row in ranked_rows:
-        row["total_rank_score"] = (
-            row["price_rank_score"] +
-            row["scale_rank_score"] +
-            row["premium_rank_score"]
+        row["total_score"] = (
+            row.get("dblow_score", 0) +
+            row.get("curr_iss_amt_score", 0)
         )
 
     return sorted(
         ranked_rows,
         key=lambda row: (
-            row["total_rank_score"],
+            -row["total_score"],
+            to_float(row["cell"].get("dblow")),
+            to_float(row["cell"].get("premium_rt")),
             to_float(row["cell"].get("price")),
             to_float(row["cell"].get("curr_iss_amt")),
-            to_float(row["cell"].get("premium_rt")),
         ),
     )
 
@@ -170,13 +193,13 @@ def format_cb(idx, row):
     line = (
         f"**{idx}. {c['bond_nm']}**({c['bond_id']})\n"
         f"> 价格:<font color=\"comment\">{c['price']}</font>"
+        f"  双低:{c.get('dblow', '--')}"
         f"  溢价率:{c.get('premium_rt', '--')}%"
         f"  规模:{c.get('curr_iss_amt', '--')}"
         f"  到期收益率:<font color=\"warning\">{c.get('ytm_rt', '--')}%</font>\n"
-        f"> 三低总分:<font color=\"info\">{row.get('total_rank_score', '--')}</font>"
-        f"  价格名次:{row.get('price_rank_score', '--')}"
-        f"  规模名次:{row.get('scale_rank_score', '--')}"
-        f"  溢价名次:{row.get('premium_rank_score', '--')}\n"
+        f"> 三低总分:<font color=\"info\">{row.get('total_score', '--')}</font>"
+        f"  双低:排{row.get('dblow_rank', '--')}/{row.get('dblow_score', '--')}分"
+        f"  规模:排{row.get('curr_iss_amt_rank', '--')}/{row.get('curr_iss_amt_score', '--')}分\n"
         f"> 评级:{c.get('rating_cd', '--')}"
         f"  剩余年限:{c.get('year_left', '--')}年"
         f"  正股:{c.get('stock_nm', '--')}"
@@ -189,11 +212,11 @@ def format_cb(idx, row):
 
 CB_RULE_MSG = (
     "**📋 可转债筛选规则**\n"
-    f"> 价格 ≤ {CB_MAX_PRICE}元\n"
-    "> 评级：AAA ~ A-\n"
+    "> 评级：AAA ~ A（排除 A-）\n"
     "> 已上市，排除停牌\n"
+    "> 排除正股含 ST\n"
     "> 排除已公告强赎、到期赎回\n"
-    "> 排序：价格/规模/溢价率名次分相加，总分越低越靠前"
+    "> 排序：双低/规模排名得分相加，总分越高越靠前"
 )
 
 
