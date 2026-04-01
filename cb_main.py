@@ -14,7 +14,7 @@ IRM_WECHAT_WEBHOOK = os.environ.get("IRM_WECHAT_WEBHOOK", "")
 
 CB_URL = "https://www.jisilu.cn/data/cbnew/cb_list_new/"
 CB_PAGE_SIZE = 1000
-CB_ALLOWED_RATINGS = ["AAA", "AA+", "AA", "AA-", "A+", "A"]
+CB_ALLOWED_RATINGS = ["AAA", "AA+", "AA", "AA-", "A+", "A", "A-"]
 CB_ALLOWED_MARKETS = ["shmb", "shkc", "szmb", "szcy"]
 
 CB_FORM_DATA = {
@@ -82,6 +82,7 @@ def get_cb_filter_reasons(c):
         reasons.append("已公告强赎(O)")
     if "R" in icons:
         reasons.append("到期赎回(R)")
+    # 正股名称里只要包含 ST（例如 ST / *ST / st），对应转债就从备选池中排除
     stock_nm = (c.get("stock_nm") or "").upper()
     if "ST" in stock_nm:
         reasons.append("正股含ST")
@@ -90,7 +91,7 @@ def get_cb_filter_reasons(c):
 
 
 def filter_cb(rows):
-    """过滤可转债：排除已公告强赎(O)和到期赎回(R)"""
+    """过滤可转债：排除正股含ST、已公告强赎(O)和到期赎回(R)"""
     result = []
     for row in rows:
         c = row["cell"]
@@ -212,7 +213,7 @@ def format_cb(idx, row):
 
 CB_RULE_MSG = (
     "**📋 可转债筛选规则**\n"
-    "> 评级：AAA ~ A（排除 A-）\n"
+    "> 评级：AAA ~ A-\n"
     "> 已上市，排除停牌\n"
     "> 排除正股含 ST\n"
     "> 排除已公告强赎、到期赎回\n"
