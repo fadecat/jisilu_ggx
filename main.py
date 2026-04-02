@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import requests
 import json
 import os
@@ -59,6 +61,7 @@ def fetch_data():
 
 MAX_MSG_LEN = 2048
 MAX_MSG_BYTES = 3900
+MAX_IMAGE_BYTES = 2 * 1024 * 1024
 MAX_SHOW = 50
 
 
@@ -143,6 +146,32 @@ def send_wechat(messages, webhook=None):
         print(f"第 {i}/{len(messages)} 条推送成功 ({len(content)} 字符 / {get_msg_size(content)} 字节)")
         if i < len(messages):
             time.sleep(1)
+
+
+def send_wechat_image(image_path, webhook=None):
+    """发送图片消息到企业微信机器人。"""
+    url = webhook or WECHAT_WEBHOOK
+    with open(image_path, "rb") as image_file:
+        image_bytes = image_file.read()
+
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise RuntimeError(
+            f"企业微信图片推送失败: `{image_path}` 大小为 {len(image_bytes)} 字节，超过 2MB 限制"
+        )
+
+    payload = {
+        "msgtype": "image",
+        "image": {
+            "base64": base64.b64encode(image_bytes).decode("utf-8"),
+            "md5": hashlib.md5(image_bytes).hexdigest(),
+        },
+    }
+    resp = requests.post(url, json=payload, timeout=20)
+    resp.raise_for_status()
+    result = resp.json()
+    if result.get("errcode") != 0:
+        raise RuntimeError(f"企业微信图片推送失败: {result}")
+    print(f"图片推送成功: {image_path} ({len(image_bytes)} 字节)")
 
 
 def main():

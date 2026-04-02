@@ -6,7 +6,8 @@ from urllib.parse import urlencode
 
 import requests
 
-from main import HEADERS, JISILU_COOKIE, MAX_MSG_BYTES, send_wechat, send_alert, get_msg_size
+from cb_image_preview import render_messages_to_image
+from main import HEADERS, JISILU_COOKIE, MAX_MSG_BYTES, send_wechat, send_wechat_image, send_alert, get_msg_size
 from irm_query import query_irm
 
 CB_WECHAT_WEBHOOK = os.environ.get("CB_WECHAT_WEBHOOK", "")
@@ -428,6 +429,13 @@ def main():
         print(msg)
         print("---")
     send_wechat(messages, CB_WECHAT_WEBHOOK)
+
+    # 保持现有 markdown 推送步骤不变，并在末尾补一张同内容预览图
+    try:
+        preview_path = render_messages_to_image(messages, "cb_preview.png")
+        send_wechat_image(preview_path, CB_WECHAT_WEBHOOK)
+    except Exception as e:
+        print(f"可转债预览图推送失败: {e}")
 
     # 查询正股董秘互动问答
     rows = filter_cb(data.get("rows", []))
