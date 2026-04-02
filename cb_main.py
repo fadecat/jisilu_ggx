@@ -198,32 +198,87 @@ def sort_cb_rows(rows):
 def format_cb(idx, row):
     """格式化单只可转债"""
     c = row["cell"]
-    sprice = c.get("sprice")
-    sprice_text = "--" if sprice in (None, "") else str(sprice)
-    if sprice not in (None, ""):
+    def color_value(value, color):
+        return f"<font color=\"{color}\">{value}</font>"
+
+    def format_price(value):
+        if value in (None, ""):
+            return "--"
         try:
-            if float(sprice) < 5:
-                sprice_text = f"**<font color=\"warning\">{sprice}</font>**"
+            value_num = float(value)
         except (TypeError, ValueError):
-            pass
+            return str(value)
+        if value_num < 100:
+            return color_value(value, "info")
+        if value_num > 130:
+            return color_value(value, "warning")
+        return str(value)
+
+    def format_dblow(value):
+        if value in (None, ""):
+            return "--"
+        try:
+            value_num = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if value_num < 130:
+            return color_value(value, "info")
+        return str(value)
+
+    def format_premium(value):
+        if value in (None, ""):
+            return "--"
+        try:
+            value_num = float(value)
+        except (TypeError, ValueError):
+            return f"{value}%"
+        if value_num < 20:
+            return color_value(f"{value}%", "info")
+        if value_num > 50:
+            return color_value(f"{value}%", "warning")
+        return f"{value}%"
+
+    def format_ytm(value):
+        if value in (None, ""):
+            return "--"
+        try:
+            value_num = float(value)
+        except (TypeError, ValueError):
+            return f"{value}%"
+        if value_num > 0:
+            return color_value(f"{value}%", "info")
+        return color_value(f"{value}%", "warning")
+
+    def format_stock_price(value):
+        if value in (None, ""):
+            return "--"
+        try:
+            value_num = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if value_num < 5:
+            return f"**{color_value(value, 'warning')}**"
+        return str(value)
+
+    price_text = format_price(c.get("price"))
+    dblow_text = format_dblow(c.get("dblow"))
+    premium_text = format_premium(c.get("premium_rt"))
+    ytm_text = format_ytm(c.get("ytm_rt"))
+    sprice_text = format_stock_price(c.get("sprice"))
 
     line = (
-        f"**{idx}. {c['bond_nm']}**({c['bond_id']})\n"
-        f"> 价格:<font color=\"comment\">{c['price']}</font>"
-        f"  双低:{c.get('dblow', '--')}"
-        f"  溢价率:{c.get('premium_rt', '--')}%"
-        f"  规模:{c.get('curr_iss_amt', '--')}"
-        f"  到期收益率:<font color=\"warning\">{c.get('ytm_rt', '--')}%</font>\n"
-        f"> 三低总分:<font color=\"info\">{row.get('total_score', '--')}</font>"
-        f"  双低:排{row.get('dblow_rank', '--')}/{row.get('dblow_score', '--')}分"
-        f"  规模:排{row.get('curr_iss_amt_rank', '--')}/{row.get('curr_iss_amt_score', '--')}分\n"
-        f"> 评级:{c.get('rating_cd', '--')}"
-        f"  剩余年限:{c.get('year_left', '--')}年"
-        f"  正股:{c.get('stock_nm', '--')}"
-        f"  正股价:{sprice_text}\n"
+        f"**{idx}. 📌 {c['bond_nm']}**({c['bond_id']})\n"
+        f"> 价格:{price_text}  双低:{dblow_text}  溢价率:{premium_text}\n"
+        f"> 规模:{c.get('curr_iss_amt', '--')}  评级:{c.get('rating_cd', '--')}"
+        f"  剩余年限:{c.get('year_left', '--')}年  到期收益率:{ytm_text}\n"
+        f"> 总分:{color_value(row.get('total_score', '--'), 'info')}"
+        f"  双低排名:{row.get('dblow_rank', '--')}({row.get('dblow_score', '--')}分)"
+        f"  规模排名:{row.get('curr_iss_amt_rank', '--')}({row.get('curr_iss_amt_score', '--')}分)\n"
+        f"> 正股:{c.get('stock_nm', '--')}  正股价:{sprice_text}\n"
     )
     if is_force_redeem_triggered(c):
         line += f"> <font color=\"warning\">⚠已触发强赎（未公告）</font>\n"
+    line += "\n---\n"
     return line
 
 
@@ -246,8 +301,8 @@ def build_cb_index_quote_message(index_data):
     return (
         "**📈 可转债市场概览**\n"
         f"> 转债等权指数：{float(index_data.get('cur_index', 0)):.3f}"
-        f" +{float(index_data.get('cur_increase_val', 0)):.3f}"
-        f" +{float(index_data.get('cur_increase_rt', 0)):.3f}%\n"
+        f" {float(index_data.get('cur_increase_val', 0)):+.3f}"
+        f" {float(index_data.get('cur_increase_rt', 0)):+.3f}%\n"
         f"> 温度：{float(index_data.get('temperature', 0)):.2f}\n"
         f"> 成交额：{float(index_data.get('volume', 0)):.2f}亿元\n"
         f"> 价格中位数：{float(index_data.get('mid_price', 0)):.3f}\n"
