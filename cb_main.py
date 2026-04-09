@@ -269,13 +269,9 @@ def format_cb(idx, row):
 
     line = (
         f"**{idx}. 📌 {c['bond_nm']}**({c['bond_id']})\n"
-        f"> 价格:{price_text}  双低:{dblow_text}  溢价率:{premium_text}\n"
-        f"> 规模:{c.get('curr_iss_amt', '--')}  评级:{c.get('rating_cd', '--')}"
-        f"  剩余年限:{c.get('year_left', '--')}年  到期收益率:{ytm_text}\n"
-        f"> 总分:{color_value(row.get('total_score', '--'), 'info')}"
-        f"  双低排名:{row.get('dblow_rank', '--')}({row.get('dblow_score', '--')}分)"
-        f"  规模排名:{row.get('curr_iss_amt_rank', '--')}({row.get('curr_iss_amt_score', '--')}分)\n"
-        f"> 正股:{c.get('stock_nm', '--')}  正股价:{sprice_text}\n"
+        f"> 价格:{price_text} 溢价率:{premium_text}\n"
+        f"> 规模:{c.get('curr_iss_amt', '--')} 评级:{c.get('rating_cd', '--')}\n"
+        f"> 剩余年限:{c.get('year_left', '--')}年 到期收益率:{ytm_text}\n"
     )
     if is_force_redeem_triggered(c):
         line += f"> <font color=\"warning\">⚠已触发强赎（未公告）</font>\n"
