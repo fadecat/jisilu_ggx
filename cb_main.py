@@ -272,6 +272,7 @@ def format_cb(idx, row):
         f"> 价格:{price_text} 溢价率:{premium_text}\n"
         f"> 规模:{c.get('curr_iss_amt', '--')} 评级:{c.get('rating_cd', '--')}\n"
         f"> 剩余年限:{c.get('year_left', '--')}年 到期收益率:{ytm_text}\n"
+        f"> 正股:{c.get('stock_nm', '--')}  正股价:{sprice_text}\n"
     )
     if is_force_redeem_triggered(c):
         line += f"> <font color=\"warning\">⚠已触发强赎（未公告）</font>\n"
